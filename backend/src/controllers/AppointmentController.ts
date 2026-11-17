@@ -2,8 +2,20 @@ import { Response } from 'express';
 import { AgendamentoService } from '../services/AgendamentoService';
 import { AuthRequest } from '../middlewares/auth';
 import { StatusAgendamento } from '../types';
+import redis from '../lib/redis';
 
 const agendamentoService = new AgendamentoService();
+
+const FILA_NOTIFICACOES = 'fila:notificacoes';
+
+async function enfileirarNotificacao(usuarioId: string, tipo: string, mensagem: string) {
+  try {
+    await redis.lpush(FILA_NOTIFICACOES, JSON.stringify({ usuarioId, tipo, mensagem }));
+    console.log(`[Notif:Fila] LPUSH → ${tipo} para usuário ${usuarioId}`);
+  } catch (err) {
+    console.error(`[Notif:Fila] Erro ao enfileirar:`, (err as Error).message);
+  }
+}
 
 export class AgendamentoController {
   async slotsDisponiveis(req: AuthRequest, res: Response): Promise<void> {
@@ -35,6 +47,13 @@ export class AgendamentoController {
         agendadoPara: new Date(agendadoPara),
         observacoes,
       });
+
+      await enfileirarNotificacao(
+        req.usuario!.usuarioId,
+        'agendamento_criado',
+        'Seu agendamento foi criado com sucesso!',
+      );
+
       res.status(201).json(agendamento);
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : 'Erro ao criar agendamento';
@@ -80,6 +99,18 @@ export class AgendamentoController {
         isAdmin,
         req.usuario!.usuarioId,
       );
+
+      if (status === 'cancelado') {
+        const usuarioId = isAdmin
+          ? (agendamento as any).usuarioId
+          : req.usuario!.usuarioId;
+        await enfileirarNotificacao(
+          usuarioId,
+          'agendamento_cancelado',
+          'Seu agendamento foi cancelado.',
+        );
+      }
+
       res.status(200).json(agendamento);
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : 'Erro ao atualizar status';

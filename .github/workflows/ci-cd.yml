@@ -12,8 +12,6 @@ on:
 env:
   NODE_VERSION: "20"
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository }}/backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository }}/frontend
 
 # ─────────────────────────────────────────────────────────────
 # JOB 1 — Lint & Type Check
@@ -100,6 +98,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute lowercase image names
+        id: images
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend=${{ env.REGISTRY }}/${REPO}/backend" >> $GITHUB_OUTPUT
+          echo "frontend=${{ env.REGISTRY }}/${REPO}/frontend" >> $GITHUB_OUTPUT
+
       - name: Login no Container Registry
         uses: docker/login-action@v3
         with:
@@ -113,8 +118,8 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE_BACKEND }}:latest
-            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+            ${{ steps.images.outputs.backend }}:latest
+            ${{ steps.images.outputs.backend }}:${{ github.sha }}
 
       - name: Build & Push imagem Frontend
         uses: docker/build-push-action@v5
@@ -122,8 +127,8 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ${{ env.IMAGE_FRONTEND }}:latest
-            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+            ${{ steps.images.outputs.frontend }}:latest
+            ${{ steps.images.outputs.frontend }}:${{ github.sha }}
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL }}
 

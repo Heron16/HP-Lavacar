@@ -7,16 +7,30 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { formatCurrency } from '../../utils/validators';
 
+/**
+ * Converte a string do input datetime-local (sem fuso, ex: "2026-11-11T09:00")
+ * interpretando como horário de Brasília (BRT = UTC-3) e retorna um Date correto.
+ */
+function parseBRT(dataStr: string): Date {
+  return new Date(dataStr + ':00-03:00');
+}
+
 function validarHorario(dataStr: string): string | null {
-  const data = new Date(dataStr);
-  const dia = data.getDay();
-  const hora = data.getHours();
-  const min = data.getMinutes();
-  const totalMin = hora * 60 + min;
+  // dataStr vem do input como "YYYY-MM-DDTHH:mm" — extrair direto sem fuso
+  const [datePart, timePart] = dataStr.split('T');
+  if (!datePart || !timePart) return null;
 
-  if (dia === 0) return 'Não atendemos aos domingos';
+  const [ano, mes, dia] = datePart.split('-').map(Number);
+  const [h, m] = timePart.split(':').map(Number);
+  const totalMin = h * 60 + m;
 
-  if (dia === 6) {
+  // Calcular dia da semana diretamente (0=dom, 6=sab)
+  const data = new Date(ano, mes - 1, dia); // meia-noite local — só para obter dia da semana
+  const diaSemana = data.getDay();
+
+  if (diaSemana === 0) return 'Não atendemos aos domingos';
+
+  if (diaSemana === 6) {
     if (totalMin < 480 || totalMin >= 720) return 'Sábado: atendemos das 08:00 às 12:00';
     return null;
   }
@@ -100,7 +114,9 @@ export function NewAppointmentPage() {
     if (erroHora) { toast.error(erroHora); return; }
     setLoading(true);
     try {
-      await api.post('/appointments', { veiculoId, servicoId, agendadoPara, observacoes });
+      // Converte o horário local (BRT) para ISO UTC antes de enviar ao backend
+      const agendadoParaUTC = parseBRT(agendadoPara).toISOString();
+      await api.post('/appointments', { veiculoId, servicoId, agendadoPara: agendadoParaUTC, observacoes });
       toast.success('Agendamento realizado!');
       navigate('/dashboard/agendamentos');
     } catch (err: unknown) {
@@ -194,7 +210,7 @@ export function NewAppointmentPage() {
                   className={`w-full px-4 py-2.5 rounded-lg border text-sm ${erroHorario ? 'border-red-400' : 'border-gray-300'}`}
                   value={agendadoPara}
                   onChange={(e) => handleDataChange(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
+                  min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
                 />
                 {erroHorario && <p className="text-xs text-red-500">{erroHorario}</p>}
               </div>

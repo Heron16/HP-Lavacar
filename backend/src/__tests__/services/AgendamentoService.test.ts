@@ -39,10 +39,10 @@ import { publicar } from '../../lib/pubsub';
 import { CANAIS } from '../../types/events';
 import { DadosCriacaoAgendamento, StatusAgendamento } from '../../types';
 
-// Segunda-feira 09:00 (horário válido, dentro da janela da manhã)
-const agendadoSegunda09h = new Date(2024, 0, 1, 9, 0);
-// Domingo 10:00 (não atendemos)
-const agendadoDomingo10h = new Date(2024, 0, 7, 10, 0);
+// Segunda-feira 12:00 UTC = 09:00 BRT (horário válido, dentro da janela da manhã)
+const agendadoSegunda09h = new Date('2024-01-01T12:00:00.000Z');
+// Domingo 13:00 UTC = 10:00 BRT (não atendemos)
+const agendadoDomingo10h = new Date('2024-01-07T13:00:00.000Z');
 
 const dadosCriacao: DadosCriacaoAgendamento = {
   usuarioId: 'u1',

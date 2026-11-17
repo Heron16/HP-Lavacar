@@ -84,3 +84,14 @@ export interface FormEdicaoUsuario {
   senha: string;
   confirmarSenha: string;
 }
+
+export type TipoNotificacao = 'agendamento_criado' | 'agendamento_cancelado';
+
+export interface Notificacao {
+  id: string;
+  usuarioId: string;
+  tipo: TipoNotificacao;
+  mensagem: string;
+  lida: boolean;
+  criadoEm: string;
+}

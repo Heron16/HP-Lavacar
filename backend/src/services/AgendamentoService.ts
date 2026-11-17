@@ -12,6 +12,33 @@ import { criarLogger } from '../utils/logger';
 
 const log = criarLogger('AgendamentoService');
 
+// Fuso horário do estabelecimento
+const TZ = 'America/Sao_Paulo';
+
+/**
+ * Extrai hora e minuto de um Date no fuso do estabelecimento (BRT).
+ */
+function getBRTTime(data: Date): { diaSemana: number; totalMinutos: number } {
+  const diasSemana: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const diaStr  = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' }).format(data);
+  const horaStr = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: '2-digit',   hour12: false }).format(data);
+  const minStr  = new Intl.DateTimeFormat('en-US', { timeZone: TZ, minute: '2-digit'               }).format(data);
+  const hora    = parseInt(horaStr === '24' ? '0' : horaStr, 10);
+  return {
+    diaSemana:     diasSemana[diaStr] ?? 0,
+    totalMinutos:  hora * 60 + parseInt(minStr, 10),
+  };
+}
+
+/**
+ * Cria um Date correspondente a YYYY-MM-DD HH:MM no fuso BRT.
+ * Equivalente a new Date(`${dateStr}T${HH}:${MM}:00-03:00`).
+ */
+function criarDataBRT(ano: number, mes: number, dia: number, horas = 0, minutos = 0): Date {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return new Date(`${ano}-${pad(mes)}-${pad(dia)}T${pad(horas)}:${pad(minutos)}:00-03:00`);
+}
+
 // Prefixos das chaves Redis para cache
 const KEY = {
   slots: (data: string, servicoId: string) => `slots:${data}:${servicoId}`,
@@ -110,8 +137,9 @@ export class AgendamentoService {
 
         const duracao = servico.duracao;
         const [ano, mes, dia] = dataStr.split('-').map(Number);
-        const data = new Date(ano, mes - 1, dia);
-        const diaSemana = data.getDay();
+        // Criar data no fuso BRT para calcular dia da semana corretamente
+        const data = criarDataBRT(ano, mes, dia);
+        const { diaSemana } = getBRTTime(data);
 
         if (diaSemana === 0) return [];
 
@@ -123,14 +151,12 @@ export class AgendamentoService {
         const todosSlots: Date[] = [];
         for (const janela of janelas) {
           for (let min = janela.inicio; min + duracao <= janela.fim; min += 30) {
-            const slot = new Date(data);
-            slot.setHours(Math.floor(min / 60), min % 60, 0, 0);
-            todosSlots.push(slot);
+            todosSlots.push(criarDataBRT(ano, mes, dia, Math.floor(min / 60), min % 60));
           }
         }
 
-        const inicioDia = new Date(data); inicioDia.setHours(0, 0, 0, 0);
-        const fimDia = new Date(data); fimDia.setHours(23, 59, 59, 999);
+        const inicioDia = criarDataBRT(ano, mes, dia, 0, 0);
+        const fimDia    = criarDataBRT(ano, mes, dia, 23, 59);
 
         type AgendamentoComServico = AppointmentModel & { servico: { duracao: number } };
         const ativos = await AppointmentModel.findAll({
@@ -153,12 +179,14 @@ export class AgendamentoService {
             });
           })
           .map((s) => {
-            const ano = s.getFullYear();
-            const mes = String(s.getMonth() + 1).padStart(2, '0');
-            const dia = String(s.getDate()).padStart(2, '0');
-            const hora = String(s.getHours()).padStart(2, '0');
-            const min = String(s.getMinutes()).padStart(2, '0');
-            return `${ano}-${mes}-${dia}T${hora}:${min}`;
+            // Formatar slot no fuso BRT para retornar "YYYY-MM-DDTHH:mm" local
+            const fmt = new Intl.DateTimeFormat('sv-SE', {
+              timeZone: TZ,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit',
+            });
+            // sv-SE usa formato "YYYY-MM-DD HH:mm" — converter para "YYYY-MM-DDTHH:mm"
+            return fmt.format(s).replace(' ', 'T');
           });
       },
     );
@@ -228,8 +256,7 @@ export class AgendamentoService {
   }
 
   private validarHorarioFuncionamento(data: Date): void {
-    const diaSemana = data.getDay();
-    const totalMinutos = data.getHours() * 60 + data.getMinutes();
+    const { diaSemana, totalMinutos } = getBRTTime(data);
 
     if (diaSemana === 0) throw new Error('Não atendemos aos domingos');
 

@@ -217,6 +217,6 @@ top
 ## Após Resolver o Incidente
 
 1. **Registrar** o incidente em uma issue no repositório com: data/hora, sintoma, causa raiz e solução aplicada.
-2. **Verificar** se o SLO foi violado (ver `docs/12-qualidade-resiliencia-observabilidade.md`).
+2. **Verificar** se o SLO foi violado (ver `docs/12-slos-resiliencia-observabilidade.md`).
 3. **Atualizar** este runbook se um novo cenário foi descoberto.
 4. **Post-mortem** para incidentes P1/P2: analisar causa raiz e propor melhoria preventiva.

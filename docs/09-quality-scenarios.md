@@ -1,123 +1,144 @@
-# 9. Cenários de Qualidade (Quality Scenarios)
+# 9. Quality Scenarios — Atributos de Qualidade
 
-Cenários de qualidade tornam os atributos de qualidade do sistema mensuráveis e verificáveis. Cada cenário segue a estrutura: **Estímulo → Contexto → Resposta → Medida**.
-
----
-
-## 9.1 Desempenho
-
-### QS-01 — Tempo de resposta da API em carga normal
-
-| Campo | Descrição |
-|---|---|
-| **Atributo** | Desempenho |
-| **Estímulo** | Um cliente autenticado envia uma requisição `GET /api/appointments/meus` |
-| **Contexto** | Sistema em operação normal com até 50 usuários simultâneos |
-| **Resposta** | A API processa a requisição e retorna os dados paginados |
-| **Medida** | Tempo de resposta ≤ 500ms em 95% das requisições (P95) |
-
-### QS-02 — Carregamento inicial do frontend
-
-| Campo | Descrição |
-|---|---|
-| **Atributo** | Desempenho |
-| **Estímulo** | Usuário acessa `https://meuapp.local` pela primeira vez |
-| **Contexto** | Rede local (LAN), conexão cabeada |
-| **Resposta** | Nginx serve o bundle estático compilado pelo Vite |
-| **Medida** | First Contentful Paint (FCP) ≤ 2 segundos |
+Documento de cenários de qualidade baseado no modelo ISO/IEC 25010 e inspirado no método de Quality Attribute Workshops (QAW).
 
 ---
 
-## 9.2 Disponibilidade
+## 9.1 Desempenho (Performance Efficiency)
 
-### QS-03 — Disponibilidade do sistema
+### QS-01 — Listagem de serviços com cache
 
-| Campo | Descrição |
+| Campo | Valor |
 |---|---|
-| **Atributo** | Disponibilidade |
-| **Estímulo** | Requisições contínuas de usuários ao longo do dia |
-| **Contexto** | Ambiente de produção (Docker Compose com `restart: unless-stopped`) |
-| **Resposta** | O sistema processa as requisições sem interrupção |
-| **Medida** | Disponibilidade ≥ 99% (downtime máximo: ~7,2 h/mês) |
+| **Estímulo** | Cliente acessa a página de agendamento (listagem de serviços) |
+| **Fonte** | 50 usuários simultâneos |
+| **Artefato** | `GET /api/services` |
+| **Ambiente** | Sistema em carga normal |
+| **Resposta** | Redis retorna resultado em cache (HIT) |
+| **Medida** | Tempo de resposta < 50 ms para cache HIT; < 300 ms para cache MISS (query MySQL) |
 
-### QS-04 — Recuperação após falha do container backend
-
-| Campo | Descrição |
-|---|---|
-| **Atributo** | Disponibilidade / Resiliência |
-| **Estímulo** | O container `aquawash_backend` para inesperadamente (crash) |
-| **Contexto** | Docker Compose em execução com política `restart: unless-stopped` |
-| **Resposta** | Docker reinicia o container automaticamente |
-| **Medida** | Tempo de recuperação ≤ 30 segundos |
+**Mecanismo implementado:** `cacheAside` com TTL de 300s para serviços ativos.
 
 ---
 
-## 9.3 Segurança
+### QS-02 — Consulta de slots disponíveis
 
-### QS-05 — Acesso não autorizado a rotas administrativas
-
-| Campo | Descrição |
+| Campo | Valor |
 |---|---|
-| **Atributo** | Segurança |
-| **Estímulo** | Usuário com perfil `cliente` tenta acessar `GET /api/users` (rota admin) |
-| **Contexto** | Token JWT válido, mas com `perfil = cliente` |
-| **Resposta** | Middleware `autorizar('admin')` rejeita a requisição |
-| **Medida** | Retorna HTTP 403 em 100% dos casos; nenhum dado é exposto |
+| **Estímulo** | Cliente seleciona data e serviço no formulário de agendamento |
+| **Fonte** | Usuário individual |
+| **Artefato** | `GET /api/appointments/slots?data=YYYY-MM-DD&servicoId=UUID` |
+| **Ambiente** | Sistema em operação normal |
+| **Resposta** | Lista de slots calculados e retornados |
+| **Medida** | Tempo de resposta < 200 ms para cache HIT; < 500 ms para MISS |
 
-### QS-06 — Tentativa de SQL Injection
-
-| Campo | Descrição |
-|---|---|
-| **Atributo** | Segurança |
-| **Estímulo** | Atacante envia payload malicioso em campo de e-mail: `' OR '1'='1` |
-| **Contexto** | Endpoint `POST /api/auth/login` |
-| **Resposta** | Sequelize usa parâmetros preparados; a query é executada com segurança |
-| **Medida** | Nenhum dado não autorizado é retornado; sistema não é comprometido |
+**Mecanismo implementado:** `cacheAside` com TTL de 120s, invalidado ao criar/cancelar agendamentos.
 
 ---
 
-## 9.4 Usabilidade
+## 9.2 Disponibilidade (Reliability)
 
-### QS-07 — Feedback visual durante carregamento
+### QS-03 — Falha do Redis
 
-| Campo | Descrição |
+| Campo | Valor |
 |---|---|
-| **Atributo** | Usabilidade |
-| **Estímulo** | Usuário navega para uma página que faz fetch de dados |
-| **Contexto** | Qualquer página do dashboard (agendamentos, veículos, etc.) |
-| **Resposta** | Frontend exibe `LoadingSpinner` durante a requisição |
-| **Medida** | Spinner aparece em ≤ 100ms após a navegação; desaparece ao receber resposta |
+| **Estímulo** | Container Redis fica indisponível |
+| **Fonte** | Falha de infraestrutura |
+| **Artefato** | Backend API — utilitário `cache.ts` |
+| **Ambiente** | Produção |
+| **Resposta** | Sistema continua operando; queries vão direto ao MySQL |
+| **Medida** | Zero downtime; degradação graceful com logs `[Cache] Erro ao ler` |
 
-### QS-08 — Responsividade em dispositivos móveis
-
-| Campo | Descrição |
-|---|---|
-| **Atributo** | Usabilidade |
-| **Estímulo** | Usuário acessa o sistema num smartphone com tela de 375px |
-| **Contexto** | Qualquer página do sistema |
-| **Resposta** | Layout adapta-se: sidebar recolhida, tabelas substituídas por cards |
-| **Medida** | Nenhum elemento ultrapassa a largura da viewport; scroll horizontal ausente |
+**Mecanismo implementado:** try/catch em `cacheAside` e `invalidarCache` — erro no Redis não propaga para o caller.
 
 ---
 
-## 9.5 Manutenibilidade
+### QS-04 — Reinicialização automática de containers
 
-### QS-09 — Adição de novo endpoint à API
-
-| Campo | Descrição |
+| Campo | Valor |
 |---|---|
-| **Atributo** | Manutenibilidade |
-| **Estímulo** | Desenvolvedor precisa adicionar um novo recurso à API (ex.: relatórios) |
-| **Contexto** | Código existente com separação routes → controllers → services → models |
-| **Resposta** | Desenvolvedor cria arquivo de rota, controller e service sem alterar outros módulos |
-| **Medida** | Mudança isolada em ≤ 3 arquivos; build compila sem erros de TypeScript |
+| **Estímulo** | Container do backend crasha (ex.: exceção não tratada em worker) |
+| **Fonte** | Docker daemon |
+| **Artefato** | `docker-compose.yml` — política `restart: unless-stopped` |
+| **Ambiente** | Produção |
+| **Resposta** | Container reinicia automaticamente |
+| **Medida** | Tempo de recuperação < 30 segundos |
 
-### QS-10 — Identificação de erro em produção
+---
 
-| Campo | Descrição |
+## 9.3 Segurança (Security)
+
+### QS-05 — Acesso não autorizado a rota admin
+
+| Campo | Valor |
 |---|---|
-| **Atributo** | Manutenibilidade / Observabilidade |
-| **Estímulo** | Usuário reporta erro 500 ao criar agendamento |
-| **Contexto** | Ambiente de produção em execução |
-| **Resposta** | Desenvolvedor consulta logs do container backend |
-| **Medida** | Causa raiz identificada em ≤ 10 minutos via `docker logs aquawash_backend` |
+| **Estímulo** | Usuário com perfil `cliente` tenta acessar `GET /api/appointments` (listagem admin) |
+| **Fonte** | Cliente autenticado com JWT válido |
+| **Artefato** | Middleware `autorizar('admin')` |
+| **Ambiente** | Qualquer |
+| **Resposta** | Requisição rejeitada com HTTP 403 |
+| **Medida** | 100% das tentativas com token de cliente retornam 403 sem vazar dados |
+
+---
+
+### QS-06 — Força bruta na autenticação
+
+| Campo | Valor |
+|---|---|
+| **Estímulo** | Atacante tenta múltiplas senhas para o mesmo e-mail |
+| **Fonte** | Agente externo |
+| **Artefato** | `POST /api/auth/login` |
+| **Ambiente** | Produção |
+| **Resposta** | Mensagem genérica ("E-mail ou senha incorretos"), sem diferenciação entre usuário inexistente e senha errada |
+| **Medida** | Sem vazamento de informação sobre existência do e-mail |
+
+**Nota:** rate limiting por IP não está implementado na versão atual — identificado como gap.
+
+---
+
+## 9.4 Manutenibilidade (Maintainability)
+
+### QS-07 — Adição de novo módulo de domínio
+
+| Campo | Valor |
+|---|---|
+| **Estímulo** | Time decide adicionar módulo de pagamentos ao sistema |
+| **Fonte** | Desenvolvedor |
+| **Artefato** | Estrutura backend (routes/controllers/services/models) |
+| **Ambiente** | Desenvolvimento |
+| **Resposta** | Novo módulo criado sem alterar módulos existentes |
+| **Medida** | Menos de 1 dia de trabalho para criar rota, controller, service e model seguindo o padrão existente |
+
+---
+
+## 9.5 Observabilidade (Operability)
+
+### QS-08 — Diagnóstico de falha em produção
+
+| Campo | Valor |
+|---|---|
+| **Estímulo** | Agendamento falha com status 400 em produção |
+| **Fonte** | Suporte recebe relato de cliente |
+| **Artefato** | Logs estruturados do backend |
+| **Ambiente** | Produção |
+| **Resposta** | Log identifica módulo, operação, IDs envolvidos e mensagem de erro |
+| **Medida** | Tempo para identificar causa raiz < 5 minutos via `docker logs aquawash_backend` |
+
+**Formato de log implementado:**
+```
+2026-11-09T14:32:10.000Z [INFO ] [AgendamentoService] Iniciando criação | {"usuarioId":"...","servicoId":"..."}
+2026-11-09T14:32:10.050Z [ERROR] [AgendamentoService] Falha: Já existe um agendamento neste horário
+```
+
+---
+
+## 9.6 Resumo dos SLOs
+
+| ID | Atributo | SLI | SLO |
+|---|---|---|---|
+| SLO-01 | Desempenho | Tempo de resposta `GET /api/services` | p95 < 300 ms |
+| SLO-02 | Desempenho | Tempo de resposta `GET /api/appointments/slots` | p95 < 500 ms |
+| SLO-03 | Disponibilidade | Uptime do sistema | ≥ 99% (mensal) |
+| SLO-04 | Disponibilidade | Recuperação de container crash | < 30 segundos |
+| SLO-05 | Segurança | Rotas admin bloqueadas sem token admin | 100% |
+| SLO-06 | Observabilidade | Incidentes identificados via log | < 5 min (MTTR) |

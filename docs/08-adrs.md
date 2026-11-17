@@ -1,133 +1,162 @@
-# 8. Registros de Decisão Arquitetural (ADRs)
+# 8. ADRs — Architecture Decision Records
 
-ADRs (*Architecture Decision Records*) documentam as decisões arquiteturais relevantes tomadas durante o desenvolvimento, com contexto, alternativas consideradas e justificativa da escolha.
-
----
-
-## ADR-001 — Arquitetura Monolítica vs. Modular vs. Microsserviços
-
-- **Data:** Fevereiro/2026
-- **Status:** Aceito
-
-### Contexto
-O sistema AquaWash é um projeto acadêmico com equipe pequena e escopo bem definido (agendamentos de lavagem). Era necessário escolher entre uma arquitetura monolítica, modular (modulith) ou baseada em microsserviços.
-
-### Alternativas Consideradas
-
-| Alternativa | Prós | Contras |
-|---|---|---|
-| Monólito simples | Simplicidade, baixo overhead operacional | Difícil de escalar módulos independentemente |
-| **Modulith** (escolhido) | Separação de responsabilidades em camadas (routes → controllers → services → models), sem overhead de microsserviços | Não escala módulos individualmente |
-| Microsserviços | Escalabilidade granular | Complexidade operacional incompatível com o tamanho do projeto |
-
-### Decisão
-Adotar arquitetura **monolítica com separação de camadas bem definidas** (estilo modulith): rotas, controllers, services e models são módulos independentes dentro de um único processo Express. Essa estrutura facilita eventual migração para microsserviços se o sistema crescer.
-
-### Consequências
-- Código organizado e testável por camada.
-- Deploy simples via Docker Compose.
-- Sem sobrecarga de comunicação entre serviços.
+Registro das principais decisões arquiteturais tomadas durante o desenvolvimento do AquaWash.
 
 ---
 
-## ADR-002 — Escolha do Banco de Dados: MySQL vs. PostgreSQL vs. MongoDB
+## ADR-001 — Arquitetura: Monólito Modular (Modulith) vs Microsserviços
 
-- **Data:** Fevereiro/2026
-- **Status:** Aceito
+**Status:** Aceita  
+**Data:** outubro/2026  
+**Autor:** Equipe Lava - Car PH
 
 ### Contexto
-O sistema precisa persistir dados relacionais fortemente ligados (usuários → veículos → agendamentos → serviços). Era necessário escolher um banco de dados adequado.
 
-### Alternativas Consideradas
-
-| Alternativa | Prós | Contras |
-|---|---|---|
-| **MySQL 8.0** (escolhido) | ACID, UUID nativo, amplamente utilizado, suporte Docker maduro | Licença Oracle (Community gratuita) |
-| PostgreSQL | ACID, open-source puro, mais recursos avançados | Curva de aprendizado ligeiramente maior para a equipe |
-| MongoDB | Flexibilidade de schema, bom para documentos | Dados do sistema são relacionais; joins complexos em NoSQL |
+Na fase inicial do projeto precisávamos escolher entre desenvolver o backend como um **monólito tradicional**, um **modulith** (monólito com módulos bem delimitados internamente) ou uma **arquitetura de microsserviços completa**.
 
 ### Decisão
-**MySQL 8.0** foi escolhido por ser amplamente conhecido pela equipe, ter suporte nativo a UUID, garantir integridade referencial via foreign keys com `ON DELETE CASCADE`, e ter imagem Docker oficial estável.
+
+Adotamos **monólito modular (modulith)** com um microsserviço extraído para notificações.
+
+A estrutura adotada:
+- **Backend principal** (`/backend`): único processo Node.js com separação interna em camadas (routes → controllers → services → models).
+- **notification-service**: processo Node.js independente, isolado, sem banco de dados próprio — comunica-se exclusivamente via Redis Pub/Sub.
 
 ### Consequências
-- Integridade relacional garantida pelo banco (FK + CASCADE).
-- Queries parametrizadas via Sequelize previnem SQL Injection.
-- Volume Docker garante durabilidade dos dados.
+
+**Positivas:**
+- Complexidade operacional reduzida: um único deploy para o core do sistema.
+- Compartilhamento de tipos TypeScript via domínio interno.
+- Facilidade de desenvolvimento e depuração numa equipe pequena.
+- O notification-service demonstra o padrão de microsserviço com baixo custo de implementação.
+
+**Negativas:**
+- Escalar partes individuais da lógica (ex.: só o módulo de agendamentos) requer escalar o processo inteiro.
+- Acoplamento implícito pode crescer se a disciplina de camadas não for mantida.
+
+### Alternativas descartadas
+
+- **Microsserviços completos**: custo de operação elevado (service mesh, descoberta de serviços, autenticação entre serviços) inadequado para equipe de 2 pessoas.
+- **Monólito puro sem separação**: descartado pela dificuldade de evolução e testabilidade.
 
 ---
 
-## ADR-003 — Autenticação: JWT vs. Session/Cookie vs. OAuth
+## ADR-002 — Banco de Dados: MySQL vs PostgreSQL vs MongoDB
 
-- **Data:** Fevereiro/2026
-- **Status:** Aceito
+**Status:** Aceita  
+**Data:** outubro/2026  
+**Autor:** Equipe Lava - Car PH
 
 ### Contexto
-O sistema precisa autenticar usuários e distinguir perfis (cliente vs. admin) em todas as requisições à API.
 
-### Alternativas Consideradas
-
-| Alternativa | Prós | Contras |
-|---|---|---|
-| **JWT** (escolhido) | Stateless, sem necessidade de armazenamento server-side, fácil de validar | Token não pode ser revogado antes da expiração |
-| Session + Cookie | Revogação simples | Requer armazenamento server-side (Redis/memória); não escala bem em múltiplas instâncias |
-| OAuth 2.0 | Padrão de mercado para SSO | Complexidade desnecessária para um sistema sem identidade externa |
+O AquaWash gerencia entidades com relacionamentos claros (usuários → veículos → agendamentos → serviços) e precisamos de um banco de dados confiável, com suporte a transações ACID.
 
 ### Decisão
-**JWT com expiração de 7 dias**, armazenado no `localStorage` do navegador. O payload carrega `usuarioId` e `perfil`, permitindo autorização granular sem consulta ao banco em cada request.
+
+**MySQL 8.0** foi escolhido como banco de dados relacional.
+
+### Justificativa
+
+| Critério | MySQL 8.0 | PostgreSQL | MongoDB |
+|---|---|---|---|
+| Suporte ACID | ✅ completo | ✅ completo | ⚠️ parcial |
+| UUID nativos | ✅ (UUID() no DDL) | ✅ | ✅ |
+| Integridade referencial | ✅ FK + CASCADE | ✅ | ❌ |
+| Suporte no Sequelize | ✅ excelente | ✅ excelente | ⚠️ via mongoose |
+| Familiaridade da equipe | ✅ alta | ⚠️ média | ⚠️ média |
+| Imagem Docker oficial | ✅ mysql:8.0 | ✅ | ✅ |
+
+Os dados do AquaWash são inerentemente relacionais: um agendamento referencia um usuário, um veículo e um serviço. Essa estrutura é naturalmente modelada em SQL com integridade referencial via chaves estrangeiras.
 
 ### Consequências
-- API stateless e escalável horizontalmente.
-- Interceptor Axios no frontend redireciona automaticamente para `/login` em caso de 401.
-- Senhas armazenadas com bcrypt (12 rounds) — nunca em texto simples.
+
+- Todas as relações possuem FKs com `ON DELETE CASCADE`, garantindo integridade automática.
+- O Sequelize mapeia as tabelas com `sync({ alter: true })`, evitando migrações manuais em desenvolvimento.
+- O script `database.sql` serve como documentação viva do schema.
 
 ---
 
-## ADR-004 — Proxy Reverso: Nginx vs. Traefik vs. Sem proxy
+## ADR-003 — Cache: Redis cache-aside vs sem cache
 
-- **Data:** Março/2026
-- **Status:** Aceito
+**Status:** Aceita  
+**Data:** novembro/2026  
+**Autor:** Equipe Lava - Car PH
 
 ### Contexto
-Com o sistema containerizado, era necessário definir como expor os serviços ao usuário final de forma segura (HTTPS).
 
-### Alternativas Consideradas
-
-| Alternativa | Prós | Contras |
-|---|---|---|
-| **Nginx** (escolhido) | Maduro, amplamente documentado, configuração declarativa, ótimo para arquivos estáticos | Configuração manual de SSL |
-| Traefik | Auto-discover de containers, SSL automático via Let's Encrypt | Mais complexo para ambiente local/acadêmico |
-| Sem proxy | Simplicidade | Sem TLS, sem isolamento, backend exposto diretamente |
+Algumas queries são executadas frequentemente e com dados que mudam pouco: listagem de serviços ativos, slots disponíveis por dia/serviço, e listagem de agendamentos pelo admin.
 
 ### Decisão
-**Nginx 1.25** como único ponto de entrada. Termina TLS com certificados mkcert (desenvolvimento local), redireciona HTTP→HTTPS, serve frontend estático e faz proxy de `/api/*` para o backend.
+
+Implementar **cache-aside com Redis** para as queries de leitura mais frequentes.
+
+TTLs definidos:
+- Serviços: 300 segundos (5 min) — mudam raramente
+- Slots disponíveis: 120 segundos (2 min) — invalidados ao criar/cancelar agendamento
+- Agendamentos admin: 60 segundos (1 min) — invalidados em qualquer mutação
+
+**Estratégia de invalidação:** ao criar, atualizar ou excluir qualquer entidade que afete o resultado da query, a chave (ou padrão de chaves via SCAN) é deletada do Redis imediatamente.
 
 ### Consequências
-- Backend nunca exposto diretamente ao host.
-- Headers de segurança centralizados (HSTS, CSP, X-Frame-Options).
-- Frontend servido diretamente pelo Nginx sem Node.js em produção.
+
+**Positivas:**
+- Redução de carga no MySQL para queries repetitivas.
+- Logs `[Cache] HIT/MISS/SET/DEL` facilitam observabilidade.
+- O Redis já era necessário para Pub/Sub, então sem custo adicional de infraestrutura.
+
+**Negativas:**
+- Window de inconsistência de até TTL segundos caso a invalidação falhe (tratada com try/catch: a query ao banco é feita normalmente se o Redis estiver indisponível).
 
 ---
 
-## ADR-005 — Framework Frontend: React vs. Vue vs. Angular
+## ADR-004 — Mensageria: Redis Pub/Sub vs Fila (BullMQ/RabbitMQ)
 
-- **Data:** Fevereiro/2026
-- **Status:** Aceito
+**Status:** Aceita  
+**Data:** novembro/2026  
+**Autor:** Equipe Lava - Car PH
 
 ### Contexto
-Escolha do framework para construção da SPA (Single Page Application).
 
-### Alternativas Consideradas
-
-| Alternativa | Prós | Contras |
-|---|---|---|
-| **React 18** (escolhido) | Ecossistema maduro, familiaridade da equipe, Vite nativo | Exige escolhas adicionais (roteamento, estado) |
-| Vue 3 | Curva de aprendizado suave, opinionado | Menos adotado pela equipe |
-| Angular | Completo, opinionado | Overhead para projeto de tamanho pequeno/médio |
+Precisávamos de um mecanismo para desacoplar efeitos colaterais (notificações, logs de auditoria) das operações principais (criar/cancelar agendamento). A questão era usar Redis Pub/Sub (fire-and-forget) ou uma fila com garantia de entrega (BullMQ sobre Redis, ou RabbitMQ).
 
 ### Decisão
-**React 18 + Vite + TypeScript + Tailwind CSS**. Combinação com build ultra-rápido (Vite), tipagem estática (TypeScript) e estilização utility-first (Tailwind) sem necessidade de CSS customizado extenso.
+
+**Redis Pub/Sub** para a versão atual, com ciência das limitações.
+
+### Justificativa
+
+- Redis já está na infraestrutura para cache; reusar sem adicionar componentes.
+- Os eventos atuais (logs de auditoria, futura notificação) toleram perda ocasional de mensagem.
+- BullMQ ou RabbitMQ adicionariam complexidade (workers, dead-letter queues, retries) desnecessária para o escopo atual.
 
 ### Consequências
-- DX (Developer Experience) elevada com HMR instantâneo.
-- Build estático otimizado para produção.
-- Tailwind elimina conflitos de CSS e facilita responsividade.
+
+- Mensagens não são persistidas: se o subscriber estiver offline ao publicar, a mensagem é perdida.
+- Aceitável enquanto o notification-service for apenas log — revisitar ao implementar envio real de e-mail/push.
+
+---
+
+## ADR-005 — Autenticação: JWT Stateless vs Sessions
+
+**Status:** Aceita  
+**Data:** outubro/2026  
+**Autor:** Equipe Lava - Car PH
+
+### Contexto
+
+Precisávamos de um mecanismo de autenticação para a API REST.
+
+### Decisão
+
+**JWT (JSON Web Token) stateless** com expiração de 7 dias, armazenado no `localStorage` do frontend.
+
+### Justificativa
+
+- API REST por natureza é stateless; sessions exigiriam armazenamento de estado no servidor (Redis session store).
+- JWT permite validação sem consulta ao banco a cada request.
+- Expiração de 7 dias equilibra segurança e UX (usuário não precisa logar toda semana).
+
+### Consequências
+
+- Revogação de token antes do vencimento requer blacklist (não implementada; aceitável para o escopo).
+- O secret JWT é configurado via variável de ambiente `JWT_SECRET`.

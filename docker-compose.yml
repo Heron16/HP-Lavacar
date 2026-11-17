@@ -1,31 +1,7 @@
-# ============================================================
-#  AquaWash — Docker Compose
-#  Serviços: mysql, backend, frontend, nginx
-#  Acesso: https://meuapp.local (porta 443)
-# ============================================================
-
 services:
 
   # ----------------------------------------------------------
-  #  Cache — Redis
-  # ----------------------------------------------------------
-  redis:
-    image: redis:7.2-alpine
-    container_name: aquawash_redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  # ----------------------------------------------------------
-  #  Banco de dados MySQL
+  #  Banco de dados MySQL — Principal
   # ----------------------------------------------------------
   mysql:
     image: mysql:8.0
@@ -37,11 +13,53 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql          # persistência dos dados
+      - mysql_data:/var/lib/mysql
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     networks:
       - internal
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ----------------------------------------------------------
+  #  Redis — Cache + Pub/Sub
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: aquawash_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  #  Banco de dados MySQL — Notificações (banco próprio)
+  # ----------------------------------------------------------
+  notif_mysql:
+    image: mysql:8.0
+    container_name: aquawash_notif_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: notif_root_pass123
+      MYSQL_DATABASE: aquawash_notif
+      MYSQL_USER: notif_user
+      MYSQL_PASSWORD: notif_pass123
+    volumes:
+      - notif_mysql_data:/var/lib/mysql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pnotif_root_pass123"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -59,12 +77,13 @@ services:
     environment:
       PORT: ${PORT:-3001}
       DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,https://meuapp.local}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,https://meuapp.local,http://localhost:8081}
+      NOTIFICATION_SERVICE_URL: http://notification-service:3002
     volumes:
-      - uploads_data:/app/uploads          # persistência das fotos de perfil
+      - uploads_data:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -73,27 +92,35 @@ services:
     networks:
       - internal
     ports:
-      - "3002:3001"
+      - "3001:3001"
 
   # ----------------------------------------------------------
-  #  Notification Service — Microsserviço de notificações
-  #  Consome eventos do Redis Pub/Sub publicados pelo backend.
-  #  Processo independente: sem porta HTTP exposta.
+  #  Microsserviço de Notificações — banco próprio
   # ----------------------------------------------------------
   notification-service:
     build:
       context: ./notification-service
       dockerfile: Dockerfile
-    container_name: aquawash_notifications
+    container_name: aquawash_notification
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      PORT: 3002
+      DB_HOST: notif_mysql
+      DB_PORT: 3306
+      DB_USER: notif_user
+      DB_PASS: notif_pass123
+      DB_NAME: aquawash_notif
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8081,https://meuapp.local}
     depends_on:
+      notif_mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - internal
+    ports:
+      - "3002:3002"
 
   # ----------------------------------------------------------
   #  Frontend — React (build estático servido pelo Nginx)
@@ -103,19 +130,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ""
+        VITE_API_URL: ${VITE_API_URL:-https://meuapp.local/api}
     container_name: aquawash_frontend
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "5174:80"    # acesse http://localhost:5174 no browser
     expose:
       - "80"
 
   # ----------------------------------------------------------
-  #  Nginx — proxy reverso + HTTPS + headers de segurança
-  #  ÚNICO serviço exposto ao host (portas 80 e 443)
+  #  Nginx — proxy reverso + HTTPS
   # ----------------------------------------------------------
   nginx:
     build:
@@ -132,21 +156,17 @@ services:
     networks:
       - internal
 
-# ============================================================
-#  Volumes — persistência de dados
-# ============================================================
 volumes:
   mysql_data:
     driver: local
-  redis_data:
+  notif_mysql_data:
     driver: local
   uploads_data:
-    driver: local          # fotos de perfil dos usuários
+    driver: local
+  redis_data:
+    driver: local
 
-# ============================================================
-#  Redes — isolamento: apenas nginx exposto ao host
-# ============================================================
 networks:
   internal:
     driver: bridge
-    internal: false       # nginx precisa de acesso externo para TLS handshake
+    internal: false

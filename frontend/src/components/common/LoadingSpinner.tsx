@@ -1,4 +1,3 @@
-/** Spinner centralizado para estados de carregamento de página */
 export function LoadingSpinner({ mensagem = 'Carregando...' }: { mensagem?: string }) {
   return (
     <div className="flex items-center justify-center min-h-[40vh]">

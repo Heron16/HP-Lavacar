@@ -89,7 +89,6 @@ export function AdminDashboard() {
               </table>
             </div>
 
-            {/* Lista mobile */}
             <div className="sm:hidden space-y-3">
               {recentes.map((a) => (
                 <div key={a.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">

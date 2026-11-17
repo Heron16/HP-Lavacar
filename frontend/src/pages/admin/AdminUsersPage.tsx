@@ -51,7 +51,6 @@ export function AdminUsersPage() {
         <LoadingSpinner />
       ) : (
         <Card>
-          {/* Tabela desktop */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
@@ -104,7 +103,6 @@ export function AdminUsersPage() {
             </table>
           </div>
 
-          {/* Cards mobile */}
           <div className="md:hidden divide-y divide-gray-100">
             {usuarios.length === 0 ? (
               <p className="p-8 text-center text-gray-400">Nenhum usuário encontrado</p>

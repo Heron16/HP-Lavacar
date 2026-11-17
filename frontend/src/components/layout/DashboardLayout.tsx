@@ -10,7 +10,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       <Navbar onMenuClick={() => setSidebarAberta((p) => !p)} />
 
       <div className="flex">
-        {/* Overlay mobile */}
         {sidebarAberta && (
           <div
             className="fixed inset-0 bg-black/40 z-20 lg:hidden"

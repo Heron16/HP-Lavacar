@@ -121,7 +121,6 @@ export function AdminAppointmentsPage() {
             </table>
           </div>
 
-          {/* Cards mobile/tablet */}
           <div className="lg:hidden divide-y divide-gray-100">
             {agendamentos.length === 0 ? (
               <p className="p-8 text-center text-gray-400">Nenhum agendamento encontrado</p>

@@ -16,7 +16,6 @@ const iconeTipo: Record<TipoVeiculo, string> = {
   carro: '🚗', moto: '🏍️', caminhao: '🚛', suv: '🚙',
 };
 
-/** Veículo enriquecido com dados do dono (retornados pelo backend via include) */
 interface VeiculoComDono extends Veiculo {
   usuario?: Pick<Usuario, 'nome' | 'email'>;
 }
@@ -64,7 +63,6 @@ export function AdminVehiclesPage() {
         <LoadingSpinner />
       ) : (
         <Card>
-          {/* Tabela — desktop */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
@@ -125,7 +123,6 @@ export function AdminVehiclesPage() {
             </table>
           </div>
 
-          {/* Cards — mobile */}
           <div className="md:hidden divide-y divide-gray-100">
             {veiculos.length === 0 ? (
               <p className="p-8 text-center text-gray-400">Nenhum veículo cadastrado</p>

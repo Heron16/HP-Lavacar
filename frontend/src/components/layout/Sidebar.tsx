@@ -11,6 +11,7 @@ const navCliente: ItemNav[] = [
   { to: '/dashboard', label: 'Início', icon: '🏠' },
   { to: '/dashboard/veiculos', label: 'Meus Veículos', icon: '🚗' },
   { to: '/dashboard/agendamentos', label: 'Agendamentos', icon: '📅' },
+  { to: '/dashboard/notificacoes', label: 'Notificações', icon: '🔔' },
   { to: '/dashboard/perfil', label: 'Meu Perfil', icon: '👤' },
 ];
 

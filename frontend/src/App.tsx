@@ -13,6 +13,7 @@ import { DashboardHome } from './pages/client/DashboardHome';
 import { VehiclesPage } from './pages/client/VehiclesPage';
 import { AppointmentsPage } from './pages/client/AppointmentsPage';
 import { NewAppointmentPage } from './pages/client/NewAppointmentPage';
+import { NotificationsPage } from './pages/client/NotificationsPage';
 
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="/dashboard/veiculos" element={<RotaPrivada perfil="cliente"><DashboardLayout><VehiclesPage /></DashboardLayout></RotaPrivada>} />
       <Route path="/dashboard/agendamentos" element={<RotaPrivada perfil="cliente"><DashboardLayout><AppointmentsPage /></DashboardLayout></RotaPrivada>} />
       <Route path="/dashboard/agendamentos/novo" element={<RotaPrivada perfil="cliente"><DashboardLayout><NewAppointmentPage /></DashboardLayout></RotaPrivada>} />
+      <Route path="/dashboard/notificacoes" element={<RotaPrivada perfil="cliente"><DashboardLayout><NotificationsPage /></DashboardLayout></RotaPrivada>} />
       <Route path="/dashboard/perfil" element={<RotaPrivada><DashboardLayout><ProfilePage /></DashboardLayout></RotaPrivada>} />
 
       <Route path="/admin" element={<RotaPrivada perfil="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></RotaPrivada>} />
